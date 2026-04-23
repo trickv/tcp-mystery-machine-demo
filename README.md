@@ -1,5 +1,70 @@
 # tcp-mystery-machine-demo
 
-TCP Mystery Machine — a raw TCP socket server with an undocumented protocol,
-used as a Claude Skills demo for the V9N AI Coding Bootcamp. Paired with a
-Claude Skill that connects via `nc` to probe and solve the protocol.
+A Voyager 1 emulator TCP server for the V9N AI Coding Bootcamp Claude Skills
+demo. The server speaks a deliberately undocumented line-based protocol on
+port 4242. No `HELP`, no menu, no navigation hints — every wrong guess
+returns `?CMD` or `?SYNTAX`. A paired Claude Code Skill ships the protocol
+manual and walks students through exploring the probe.
+
+## Quickstart (local)
+
+```sh
+python3 -m server          # listens on 0.0.0.0:4242
+echo 'STATUS' | nc -q 1 localhost 4242
+```
+
+## Docker
+
+```sh
+docker compose up -d --build
+echo 'STATUS' | nc -q 1 localhost 4242
+docker compose down
+```
+
+## Deploy to VPS
+
+See [DEPLOY.md](./DEPLOY.md).
+
+## The Claude Code Skill
+
+Install (symlink) so Claude Code can pick it up:
+
+```sh
+mkdir -p ~/.claude/skills
+ln -s "$PWD/skills/voyager-probe" ~/.claude/skills/voyager-probe
+```
+
+Then in Claude Code:
+
+> connect to the voyager probe
+
+or
+
+> what is the voyager telemetry saying
+
+The skill lives in [`skills/voyager-probe/`](./skills/voyager-probe/). Its
+command reference is [`reference/commands.md`](./skills/voyager-probe/reference/commands.md),
+transport options are [`reference/transports.md`](./skills/voyager-probe/reference/transports.md),
+and the guided tour is [`reference/tour.md`](./skills/voyager-probe/reference/tour.md).
+
+## Protocol (abridged)
+
+- Plaintext TCP, CRLF-delimited, port 4242.
+- Banner on connect: `VGR1 FDS READY`, then prompt `> `.
+- Multi-line replies terminated by a line containing only `.` (SMTP-style).
+- Error codes: `?CMD`, `?SYNTAX`, `?BUSY`, `?OVF`, `?TIMEOUT`.
+- Everything is read-only and computed live from the system clock
+  (distance, RTG watts, light time). Modeled values carry `(APPROX)`.
+
+Full grammar in the skill's command reference. Commands are not documented
+here on purpose.
+
+## Layout
+
+```
+server/          asyncio listener + protocol + telemetry + dispatcher
+skills/          Claude Code skill (the protocol manual)
+Dockerfile
+docker-compose.yml
+DEPLOY.md
+```
