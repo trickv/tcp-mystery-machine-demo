@@ -4,25 +4,11 @@ How to talk to `voyager1.v9n.us:4242` from your own machine. Pick
 the section that matches your OS. Open a socket, type commands at
 the `> ` prompt, type `QUIT` when done.
 
----
-
-## Linux
-
-```sh
-telnet voyager1.v9n.us 4242
-# or
-nc voyager1.v9n.us 4242
-```
-
-If neither is installed, grab them on Debian / Ubuntu / WSL:
-
-```sh
-sudo apt install -y telnet netcat-openbsd
-```
-
-On Fedora / RHEL: `sudo dnf install telnet nmap-ncat` (then use
-`ncat` in place of `nc`). On Arch: `sudo pacman -S inetutils
-openbsd-netcat`.
+**Don't want to fight your OS?** Open the bootcamp's GitHub
+Codespace at
+<https://github.com/trickv/coding-bootcamp-codespace> — it's a
+Linux environment with `nc` and `telnet` already installed, in your
+browser, free.
 
 ---
 
@@ -34,7 +20,7 @@ telnet voyager1.v9n.us 4242
 nc voyager1.v9n.us 4242
 ```
 
-macOS ships BSD `nc`. It works the same way interactively.
+Both ship with macOS. Works the same way interactively.
 
 ---
 
@@ -54,6 +40,29 @@ use the Linux tools inside it:
 wsl
 telnet voyager1.v9n.us 4242
 ```
+
+Or spin up the bootcamp [Codespace](https://github.com/trickv/coding-bootcamp-codespace)
+and do it from the browser.
+
+---
+
+## Linux
+
+```sh
+telnet voyager1.v9n.us 4242
+# or
+nc voyager1.v9n.us 4242
+```
+
+If neither is installed, grab them on Debian / Ubuntu / WSL:
+
+```sh
+sudo apt install -y telnet netcat-openbsd
+```
+
+On Fedora / RHEL: `sudo dnf install telnet nmap-ncat` (then use
+`ncat` in place of `nc`). On Arch: `sudo pacman -S inetutils
+openbsd-netcat`.
 
 ---
 
