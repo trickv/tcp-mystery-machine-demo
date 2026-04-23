@@ -55,10 +55,41 @@
     setStatus('error', 'err');
   });
 
-  // Send keystrokes as raw bytes. Terminal sends '\r' for Enter; the server
-  // accepts CR, LF, or CRLF, so forward verbatim.
+  // Line-edited local input with local echo. The server is line-oriented
+  // (readuntil LF) and does no echo, so without this the user types into
+  // a void. We accumulate characters client-side, echo them to the
+  // terminal, handle backspace, and only transmit when Enter is pressed
+  // (sending '\r\n' because xterm sends bare '\r' for Enter but the
+  // server's readuntil wants '\n').
+  let buf = '';
+
   term.onData((data) => {
     if (ws.readyState !== WebSocket.OPEN) return;
-    ws.send(new TextEncoder().encode(data));
+
+    for (const ch of data) {
+      const code = ch.charCodeAt(0);
+
+      if (ch === '\r' || ch === '\n') {
+        // Submit the line.
+        term.write('\r\n');
+        ws.send(new TextEncoder().encode(buf + '\r\n'));
+        buf = '';
+      } else if (ch === '\x7f' || ch === '\b') {
+        // Backspace / DEL — rub out one char.
+        if (buf.length > 0) {
+          buf = buf.slice(0, -1);
+          term.write('\b \b');
+        }
+      } else if (ch === '\x03') {
+        // Ctrl-C — discard the current line, show ^C.
+        term.write('^C\r\n');
+        buf = '';
+      } else if (code >= 0x20 && code !== 0x7f) {
+        // Printable.
+        buf += ch;
+        term.write(ch);
+      }
+      // Ignore other control chars (arrow keys, function keys, etc).
+    }
   });
 })();
