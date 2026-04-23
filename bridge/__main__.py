@@ -17,9 +17,11 @@ Stdlib only except for `websockets` (single PyPI dep).
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import logging
 import mimetypes
 import os
+import socket
 import sys
 from pathlib import Path
 
@@ -89,10 +91,16 @@ async def _process_request(connection, request):
     return _serve_static(request.path)
 
 
-async def _relay(tcp_host: str, tcp_port: int, ws) -> None:
-    """Connect to the TCP server and pump bytes both directions."""
+async def _relay(tcp_ip: str, tcp_port: int, ws) -> None:
+    """Connect to the TCP server and pump bytes both directions.
+
+    `tcp_ip` is already a numeric address (pre-resolved at startup), so
+    asyncio skips the thread-backed DNS path entirely. This matters on
+    low-ulimit hosts where spawning a getaddrinfo thread fails with
+    "can't start new thread".
+    """
     try:
-        reader, writer = await asyncio.open_connection(tcp_host, tcp_port)
+        reader, writer = await asyncio.open_connection(tcp_ip, tcp_port)
     except OSError as exc:
         try:
             await ws.send(f"?BRIDGE_UPSTREAM_DOWN {exc}\r\n".encode())
@@ -102,7 +110,7 @@ async def _relay(tcp_host: str, tcp_port: int, ws) -> None:
         return
 
     peer = ws.remote_address
-    _log.info("bridge OPEN ws=%s tcp=%s:%d", peer, tcp_host, tcp_port)
+    _log.info("bridge OPEN ws=%s tcp=%s:%d", peer, tcp_ip, tcp_port)
 
     async def tcp_to_ws():
         try:
@@ -146,9 +154,14 @@ async def _relay(tcp_host: str, tcp_port: int, ws) -> None:
     _log.info("bridge CLOSE ws=%s", peer)
 
 
-async def run(host: str, port: int, tcp_host: str, tcp_port: int) -> None:
+async def run(host: str, port: int, tcp_ip: str, tcp_port: int) -> None:
+    # Replace the default unbounded ThreadPoolExecutor with a small one so
+    # accidental thread-path calls can't blow through the host's nproc limit.
+    loop = asyncio.get_running_loop()
+    loop.set_default_executor(concurrent.futures.ThreadPoolExecutor(max_workers=4))
+
     async def handler(ws):
-        await _relay(tcp_host, tcp_port, ws)
+        await _relay(tcp_ip, tcp_port, ws)
 
     async with ws_serve(
         handler,
@@ -159,7 +172,7 @@ async def run(host: str, port: int, tcp_host: str, tcp_port: int) -> None:
     ) as server:
         _log.info(
             "listening on %s:%d (upstream %s:%d, static %s)",
-            host, port, tcp_host, tcp_port, WEB_DIR,
+            host, port, tcp_ip, tcp_port, WEB_DIR,
         )
         await server.serve_forever()
 
@@ -175,8 +188,22 @@ def main() -> None:
     port = _env_int("BRIDGE_PORT", 8428)
     tcp_host = os.environ.get("BRIDGE_TCP_HOST", "127.0.0.1")
     tcp_port = _env_int("BRIDGE_TCP_PORT", 4242)
+
+    # Resolve the upstream synchronously once, up-front. Avoids asyncio's
+    # thread-backed getaddrinfo per connection (which is fatal when the
+    # host's nproc ulimit is low). If resolution fails, fail loudly at
+    # startup rather than on the first student connection.
     try:
-        asyncio.run(run(host, port, tcp_host, tcp_port))
+        infos = socket.getaddrinfo(tcp_host, tcp_port, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        print(f"bridge: cannot resolve BRIDGE_TCP_HOST={tcp_host!r}: {exc}", file=sys.stderr)
+        sys.exit(2)
+    tcp_ip = infos[0][4][0]
+    if tcp_ip != tcp_host:
+        print(f"bridge: resolved {tcp_host} -> {tcp_ip}", file=sys.stderr)
+
+    try:
+        asyncio.run(run(host, port, tcp_ip, tcp_port))
     except KeyboardInterrupt:
         pass
 
