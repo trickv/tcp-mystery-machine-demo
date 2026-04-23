@@ -1,40 +1,123 @@
 # Transports
 
-Pick in priority order: `nc` → `ncat` → `python3` → `node`. Always one-shot
-(send command, read until `.` terminator or quiet, close). Never hold a
-socket open across turns.
+How to talk to `voyager1.v9n.us:4242` from your own machine. Pick the
+section that matches your OS. Always use one-shot queries — don't hold
+a socket open across commands.
 
-Assume `$VOYAGER_HOST` is set; fall back to `voyager1.v9n.us`.
+If `VOYAGER_HOST` is set in your environment the examples use it;
+otherwise they fall back to `voyager1.v9n.us`.
 
-## 1. `nc` (preferred)
+---
 
-Two common flavors with different flag sets. Detect first:
+## Linux
+
+Most distros ship OpenBSD `nc` (the `netcat-openbsd` package):
+
+```sh
+echo 'STATUS' | nc -q 1 voyager1.v9n.us 4242
+```
+
+The `-q 1` tells `nc` to exit one second after stdin closes; without
+it, `nc` hangs waiting for the server to close the connection.
+
+If `nc` isn't installed, `ncat` (part of `nmap`) works too:
+
+```sh
+echo 'STATUS' | ncat --recv-only voyager1.v9n.us 4242
+```
+
+---
+
+## macOS
+
+macOS ships BSD `nc`, which does **not** have `-q`. Use `-w 2`
+instead (exit after 2 seconds of idle):
+
+```sh
+echo 'STATUS' | nc -w 2 voyager1.v9n.us 4242
+```
+
+If you don't know which `nc` you have, this detects and runs the
+right one:
 
 ```sh
 if nc -h 2>&1 | grep -q -- '-q'; then
-  NC_ARGS="-q 1"          # OpenBSD nc (most Linux distros)
+  NC_ARGS="-q 1"          # OpenBSD (most Linux)
 else
-  NC_ARGS="-w 2"          # BSD nc (macOS default)
+  NC_ARGS="-w 2"          # BSD (macOS)
 fi
-echo 'STATUS' | nc $NC_ARGS "${VOYAGER_HOST:-voyager1.v9n.us}" 4242
+echo 'STATUS' | nc $NC_ARGS voyager1.v9n.us 4242
 ```
 
-- **OpenBSD nc** (`netcat-openbsd` on Debian/Ubuntu): use `-q 1` — exit 1s after EOF on stdin. Without this, nc hangs waiting for the server to close.
-- **BSD nc** (macOS): no `-q`. Use `-w 2` — 2-second idle timeout.
-- **GNU netcat** (rare): use `-c` to close after stdin EOF.
+---
 
-## 2. `ncat` (nmap)
+## Windows
 
-Different binary; always available where nmap is installed.
+Three options, easiest first.
+
+### Option 1 — WSL
+
+If you have WSL installed, use the Linux `nc` inside it:
 
 ```sh
-echo 'STATUS' | ncat --recv-only "${VOYAGER_HOST:-voyager1.v9n.us}" 4242
+wsl -- bash -c "echo STATUS | nc -q 1 voyager1.v9n.us 4242"
 ```
 
-`--recv-only` is the analog of OpenBSD `-q` — close send side after stdin EOF
-and keep reading until the server closes.
+### Option 2 — PowerShell
 
-## 3. `python3` one-liner (always works if Python is installed)
+Stock Win10/Win11, no install. `nc` isn't on Windows, but .NET has a
+TCP client:
+
+```powershell
+$client = New-Object System.Net.Sockets.TcpClient("voyager1.v9n.us", 4242)
+$client.ReceiveTimeout = 3000
+$stream = $client.GetStream()
+$cmd = [System.Text.Encoding]::ASCII.GetBytes("STATUS`r`n")
+$stream.Write($cmd, 0, $cmd.Length)
+$buf = New-Object System.IO.MemoryStream
+$chunk = New-Object byte[] 4096
+try {
+  while ($true) {
+    $n = $stream.Read($chunk, 0, $chunk.Length)
+    if ($n -le 0) { break }
+    $buf.Write($chunk, 0, $n)
+    $text = [System.Text.Encoding]::ASCII.GetString($buf.ToArray())
+    if ($text -match "`n\.`r?`n") { break }
+  }
+} catch [System.IO.IOException] { }
+$client.Close()
+[System.Text.Encoding]::ASCII.GetString($buf.ToArray())
+```
+
+Swap `"STATUS"` for any other command. `$host` is a reserved
+PowerShell variable — don't use it.
+
+### Option 3 — Don't use `telnet.exe`
+
+It's disabled by default on modern Windows, can't reliably emit CRLF,
+and can't detect the server's `.` end-of-reply. Use WSL or PowerShell.
+
+---
+
+## Interactive poking: `telnet`
+
+Any OS, if `telnet` is installed:
+
+```sh
+telnet voyager1.v9n.us 4242
+```
+
+Type commands and press Enter. `QUIT` to exit cleanly, or Ctrl-] then
+`quit` to force-close.
+
+---
+
+## Programmatic fallbacks
+
+If nothing above works, these run anywhere the respective runtime is
+installed.
+
+### Python
 
 ```sh
 python3 -c '
@@ -50,7 +133,6 @@ try:
         if not chunk:
             break
         buf += chunk
-        # End on dot-line (multi-line reply) or after a prompt (single-line)
         if b"\n.\r\n" in buf or b"\n.\n" in buf:
             break
 except socket.timeout:
@@ -60,10 +142,9 @@ sys.stdout.write(buf.decode("ascii", errors="replace"))
 '
 ```
 
-Swap `b"STATUS\r\n"` for whatever command you want. For multiple commands in
-one connection, separate with `\r\n`.
+For multiple commands in one connection, separate with `\r\n`.
 
-## 4. `node` one-liner
+### Node
 
 ```sh
 node -e '
@@ -81,76 +162,24 @@ s.on("close", () => {});
 '
 ```
 
-## Windows
+---
 
-**Prefer WSL if available** — it gives the student a real `nc` and matches
-every other example in this file:
+## How to read the replies
 
-```sh
-wsl -- bash -c "echo STATUS | nc -q 1 \$VOYAGER_HOST 4242"
-```
+- **Banner on connect:** `VGR1 FDS READY` then a `> ` prompt.
+- **Single-line reply:** one line, then `> ` again. All errors look
+  like `?CMD`, `?SYNTAX`, `?BUSY`, `?OVF`, `?TIMEOUT`, `?SHUTDOWN`.
+- **Multi-line reply:** several lines terminated by a line containing
+  only `.` (SMTP-style). Stop reading when you see that line.
+- **On `?BUSY` / `?OVF` / `?TIMEOUT` / `?SHUTDOWN`** the server closes
+  the connection after sending the error.
 
-**PowerShell (stock Win10/11, no install):** use `System.Net.Sockets.TcpClient`
-with raw byte reads (mirrors the Python one-liner — reads until the `\n.\r\n`
-sentinel or the socket goes quiet).
-
-```powershell
-$Target = if ($env:VOYAGER_HOST) { $env:VOYAGER_HOST } else { "voyager1.v9n.us" }
-$client = New-Object System.Net.Sockets.TcpClient($Target, 4242)
-$client.ReceiveTimeout = 3000
-$stream = $client.GetStream()
-$cmd = [System.Text.Encoding]::ASCII.GetBytes("STATUS`r`n")
-$stream.Write($cmd, 0, $cmd.Length)
-$buf = New-Object System.IO.MemoryStream
-$chunk = New-Object byte[] 4096
-try {
-  while ($true) {
-    $n = $stream.Read($chunk, 0, $chunk.Length)
-    if ($n -le 0) { break }
-    $buf.Write($chunk, 0, $n)
-    $text = [System.Text.Encoding]::ASCII.GetString($buf.ToArray())
-    if ($text -match "`n\.`r?`n") { break }
-  }
-} catch [System.IO.IOException] {
-  # ReceiveTimeout fired — use whatever we have (single-line replies like ?CMD)
-}
-$client.Close()
-[System.Text.Encoding]::ASCII.GetString($buf.ToArray())
-```
-
-Gotchas:
-- `$host` is a reserved PowerShell variable — use `$Target` (as above) or similar.
-- Backtick-r backtick-n (`` `r`n ``) is PowerShell's CRLF escape.
-- `ReceiveTimeout = 3000` makes `Stream.Read` throw `IOException` after 3s of
-  silence, which is how we exit for single-line replies (`?CMD`, `?SYNTAX`,
-  `?BUSY`) that have no `.` terminator. The `try/catch` treats that as
-  "done, print what we have."
-- Replace `"STATUS"` with any other command verbatim.
-
-**cmd.exe:** no native TCP client. Don't use classic `telnet.exe` — it's
-disabled by default, can't reliably send CRLF, and has no way to detect the
-`.` terminator. If stuck on cmd, invoke PowerShell:
-
-```cmd
-powershell -NoProfile -Command "..."
-```
-
-**Git Bash:** does not ship `nc`. Use the PowerShell approach above, or
-install Python and use the Python one-liner from section 3.
-
-## Parsing hints
-
-- Server banner arrives before your command is echoed as part of the reply. Typical first output: `VGR1 FDS READY\r\n> ` then your reply.
-- For multi-line replies, stop reading when you see a line containing only `.`.
-- Error codes (`?CMD`, `?SYNTAX`, `?BUSY`, `?OVF`, `?TIMEOUT`) are single lines — no dot terminator.
-- On `?BUSY`, `?OVF`, `?TIMEOUT`, the server closes the connection after the reply.
-
-## Failure modes
+## Common failure modes
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `nc` hangs indefinitely | used OpenBSD nc without `-q 1` | add `-q 1` |
+| `nc` hangs indefinitely | OpenBSD nc without `-q 1` | add `-q 1` |
 | `nc: invalid option -- 'q'` | BSD/macOS nc | use `-w 2` instead |
-| Connection refused | server down, wrong port, firewall | check `$VOYAGER_HOST` / port 4242 |
+| Connection refused | server down, wrong port, firewall | check host / port 4242 |
 | `?BUSY` received | server at 200-connection cap | retry later |
-| Empty output | peer closed before reply | check server logs; shouldn't happen for one-shots |
+| Empty output on a one-shot | peer closed before reply | very unlikely in practice |
