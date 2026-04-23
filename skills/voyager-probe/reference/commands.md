@@ -133,6 +133,7 @@ LOG
 | `?BUSY` | server at 200-connection cap; closed |
 | `?OVF` | input line > 256 bytes; closed |
 | `?TIMEOUT` | 120s idle; closed |
+| `?SHUTDOWN` | server is shutting down; closed |
 
 Every modeled field (distance, RTG watts, OWLT/RTLT, readings) carries
 `(APPROX)` or `~`. Nothing in this server is live JPL telemetry.

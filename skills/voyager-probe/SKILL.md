@@ -32,6 +32,7 @@ VGR1, the voyager probe, or the tcp mystery machine.
   - `?BUSY` — server at connection cap; connection closed.
   - `?OVF` — input line too long; connection closed.
   - `?TIMEOUT` — idle disconnect.
+  - `?SHUTDOWN` — server is shutting down; connection closed.
 
 All server output is uppercase. Commands are upcased before parsing.
 

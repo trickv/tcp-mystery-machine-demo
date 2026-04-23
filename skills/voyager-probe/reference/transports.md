@@ -90,34 +90,42 @@ every other example in this file:
 wsl -- bash -c "echo STATUS | nc -q 1 \$VOYAGER_HOST 4242"
 ```
 
-**PowerShell (stock Win10/11, no install):** use `System.Net.Sockets.TcpClient`.
+**PowerShell (stock Win10/11, no install):** use `System.Net.Sockets.TcpClient`
+with raw byte reads (mirrors the Python one-liner — reads until the `\n.\r\n`
+sentinel or the socket goes quiet).
 
 ```powershell
-$host_ = if ($env:VOYAGER_HOST) { $env:VOYAGER_HOST } else { "voyager1.v9n.us" }
-$client = [System.Net.Sockets.TcpClient]::new($host_, 4242)
+$Target = if ($env:VOYAGER_HOST) { $env:VOYAGER_HOST } else { "voyager1.v9n.us" }
+$client = New-Object System.Net.Sockets.TcpClient($Target, 4242)
 $client.ReceiveTimeout = 3000
 $stream = $client.GetStream()
-$writer = [System.IO.StreamWriter]::new($stream); $writer.NewLine = "`r`n"; $writer.AutoFlush = $true
-$reader = [System.IO.StreamReader]::new($stream)
-$writer.WriteLine("STATUS")
-$buf = ""
+$cmd = [System.Text.Encoding]::ASCII.GetBytes("STATUS`r`n")
+$stream.Write($cmd, 0, $cmd.Length)
+$buf = New-Object System.IO.MemoryStream
+$chunk = New-Object byte[] 4096
 try {
   while ($true) {
-    $line = $reader.ReadLine()
-    if ($null -eq $line) { break }
-    $buf += "$line`n"
-    if ($line -eq ".") { break }
+    $n = $stream.Read($chunk, 0, $chunk.Length)
+    if ($n -le 0) { break }
+    $buf.Write($chunk, 0, $n)
+    $text = [System.Text.Encoding]::ASCII.GetString($buf.ToArray())
+    if ($text -match "`n\.`r?`n") { break }
   }
-} catch { }
+} catch [System.IO.IOException] {
+  # ReceiveTimeout fired — use whatever we have (single-line replies like ?CMD)
+}
 $client.Close()
-Write-Output $buf
+[System.Text.Encoding]::ASCII.GetString($buf.ToArray())
 ```
 
 Gotchas:
-- `$host` is a reserved PowerShell variable — use `$host_` or similar.
+- `$host` is a reserved PowerShell variable — use `$Target` (as above) or similar.
 - Backtick-r backtick-n (`` `r`n ``) is PowerShell's CRLF escape.
-- `ReadLine` blocks; `ReceiveTimeout` makes it throw after 3s of silence so
-  single-line replies (`?CMD`, `?SYNTAX`) don't hang.
+- `ReceiveTimeout = 3000` makes `Stream.Read` throw `IOException` after 3s of
+  silence, which is how we exit for single-line replies (`?CMD`, `?SYNTAX`,
+  `?BUSY`) that have no `.` terminator. The `try/catch` treats that as
+  "done, print what we have."
+- Replace `"STATUS"` with any other command verbatim.
 
 **cmd.exe:** no native TCP client. Don't use classic `telnet.exe` — it's
 disabled by default, can't reliably send CRLF, and has no way to detect the

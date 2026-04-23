@@ -9,24 +9,41 @@ Every step: show the exact shell invocation, show the raw server output
 verbatim, then explain one or two interesting things. Invite follow-ups
 rather than marching through.
 
+## Before step 1: pick `$NC`
+
+The examples below use `"$NC"` as a placeholder for the user's netcat
+invocation. Before the first step, detect the flavor and set it:
+
+```sh
+if nc -h 2>&1 | grep -q -- '-q'; then
+  NC="nc -q 1"          # OpenBSD nc (most Linux)
+else
+  NC="nc -w 2"          # BSD nc (macOS)
+fi
+```
+
+If `nc` is missing entirely, fall back to the Python one-liner from
+`reference/transports.md`. Do not use `telnet`.
+
 ## Step 1 — `STATUS`
 
 ```sh
-echo 'STATUS' | nc -q 1 "$VOYAGER_HOST" 4242
+echo 'STATUS' | $NC "$VOYAGER_HOST" 4242
 ```
 
 The overview. Point out:
-- `MET` — mission elapsed time. This ticks every query.
+- `MET` — Mission Elapsed Time. This ticks every query.
 - `DIST` — Voyager 1 is now >170 AU from Earth; light takes ~23.5 hours one-way.
 - `RTG` — power has dropped below 250W. The probe is dying slowly.
 - `INST 2/9` — only MAG and PWS are still powered.
+- `UPTIME` — time since the FDS reboot in 2024. Note how it differs from MET.
 
 Ask: "Want to see which instruments are still on, or dig into the power situation first?"
 
 ## Step 2 — `DSN LINK`
 
 ```sh
-echo 'DSN LINK' | nc -q 1 "$VOYAGER_HOST" 4242
+echo 'DSN LINK' | $NC "$VOYAGER_HOST" 4242
 ```
 
 The communications link. Point out:
@@ -39,7 +56,7 @@ Ask: "Notice the bitrate? Want to see what that bitrate is carrying?"
 ## Step 3 — `INST LIST`
 
 ```sh
-echo 'INST LIST' | nc -q 1 "$VOYAGER_HOST" 4242
+echo 'INST LIST' | $NC "$VOYAGER_HOST" 4242
 ```
 
 Which instruments are alive. Point out:
@@ -52,7 +69,7 @@ Ask: "Want to see what MAG is actually reading right now?"
 ## Step 4 — `INST MAG`
 
 ```sh
-echo 'INST MAG' | nc -q 1 "$VOYAGER_HOST" 4242
+echo 'INST MAG' | $NC "$VOYAGER_HOST" 4242
 ```
 
 A live instrument readout. Point out:
@@ -64,7 +81,7 @@ Ask: "Want to see the probe's brain? It's 70KB of memory total."
 ## Step 5 — `FDS MEM`
 
 ```sh
-echo 'FDS MEM' | nc -q 1 "$VOYAGER_HOST" 4242
+echo 'FDS MEM' | $NC "$VOYAGER_HOST" 4242
 ```
 
 The Flight Data Subsystem. Point out:
@@ -77,7 +94,7 @@ Ask: "Want to see the mission history?"
 ## Step 6 — `LOG 20`
 
 ```sh
-echo 'LOG 20' | nc -q 1 "$VOYAGER_HOST" 4242
+echo 'LOG 20' | $NC "$VOYAGER_HOST" 4242
 ```
 
 The timeline. Point out:
@@ -91,7 +108,7 @@ End the tour: "That's the tour. `LOG 50` for more detail, or poke at any command
 ## Tour pacing rules
 
 - One step per turn. Never batch.
-- Always include the exact shell command so the student can re-run it.
+- Always include the exact shell command so the student can re-run it, with `$NC` expanded to the concrete flag set (e.g. `nc -q 1` or `nc -w 2`).
 - Always include the raw output verbatim before explaining.
 - End each step with a question that invites direction, not a summary.
 - If the student wanders off-tour, follow their lead. The tour is a default, not a script.

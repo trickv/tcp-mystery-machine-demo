@@ -1,31 +1,28 @@
 # Deployment runbook
 
-Target: Ubuntu 22.04+ VPS with a public IP. Port 4242/tcp open. Docker +
-compose plugin installed.
+Target: the bootcamp VPS is Debian 9 (stretch) with docker 19.03 and
+docker-compose 1.8. The compose file uses the v2 schema so compose 1.8
+understands it. Port 4242/tcp needs to reach the public internet.
 
-## Prereqs
+## Prereqs (Debian 9 / stretch)
 
-```sh
-sudo apt update
-sudo apt install -y docker.io docker-compose-plugin netcat-openbsd ufw
-sudo usermod -aG docker "$USER"   # log out / back in after this
-```
-
-On older distros (Debian 9 / Stretch) the `docker-compose-plugin` package
-doesn't exist; use the stand-alone `docker-compose` binary (Python 2.7
-era). The compose file uses the v2 schema for compatibility with
-compose 1.x. On a modern install use `docker compose` (space) in place
-of `docker-compose` (hyphen) below.
+Assumed already installed: `docker-ce`, `docker-compose` (1.8), `nc`
+(`netcat-openbsd`), and a firewall. If any are missing, install with
+whatever package manager you use — this runbook doesn't try to
+bootstrap them.
 
 ## First-time setup
 
 ```sh
-sudo ufw allow 4242/tcp
-sudo ufw reload
 git clone git@github.com:trickv/tcp-mystery-machine-demo.git
 cd tcp-mystery-machine-demo
-docker-compose up -d --build     # or: docker compose up -d --build
+docker-compose up -d --build
 ```
+
+Open port 4242 in whatever firewall the host uses (iptables / ufw /
+cloud SG). Stretch's `ufw` predates the iptables-nft transition, so if
+`ufw` behaves strangely, `iptables -A INPUT -p tcp --dport 4242 -j
+ACCEPT` is the direct path.
 
 ## Verify from the VPS
 
@@ -40,10 +37,10 @@ Expected: banner + STATUS block terminated by `.`, container logs show
 ## Verify from the outside
 
 ```sh
-echo 'STATUS' | nc -q 1 <vps-host> 4242
+echo 'STATUS' | nc -q 1 voyager1.v9n.us 4242
 ```
 
-If you get connection refused: check `sudo ufw status`, check
+If you get connection refused: check the host firewall, check
 `ss -ltnp | grep 4242` on the VPS, check the container is running
 (`docker-compose ps`).
 
@@ -69,6 +66,12 @@ docker-compose logs --tail=200
 docker-compose logs -f
 ```
 
+## Modern-install alternative (not this VPS)
+
+If you're redeploying on a modern host with compose v2 (`docker compose`
+as a docker CLI subcommand, space-separated), every `docker-compose` in
+this file becomes `docker compose`. Everything else stays the same.
+
 ## Troubleshooting
 
 - **Port already in use** (`bind: address already in use`): find and kill
@@ -76,9 +79,13 @@ docker-compose logs -f
   ```sh
   sudo ss -ltnp | grep 4242
   ```
-- **UFW blocking**: `sudo ufw status` should show `4242/tcp ALLOW`.
 - **Container restart loop**: `docker-compose logs` for the stack trace.
   Most likely a Python import error from a hand-edit.
+- **Compose 1.8 rejects the file**: it predates some v2 keys. If you hit
+  an "Unsupported config option" error, pin the failing key in a newer
+  compose, or drop the key — most are optional.
+- **`restart: unless-stopped` ignored**: older docker-compose versions
+  honor `restart: always` more reliably. Swap if needed.
 - **Too many reconnects from one student**: the 200-connection cap plus
   120s idle timeout prevents abuse. `?BUSY` is the expected response at
   cap — students see it, they retry.

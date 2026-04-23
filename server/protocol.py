@@ -15,6 +15,7 @@ EOR = "."
 ERR_BUSY = "?BUSY"
 ERR_OVF = "?OVF"
 ERR_TIMEOUT = "?TIMEOUT"
+ERR_SHUTDOWN = "?SHUTDOWN"
 
 _log = logging.getLogger("voyager.protocol")
 
@@ -59,7 +60,7 @@ async def read_line(
         raise IdleTimeout()
     except asyncio.IncompleteReadError:
         raise ConnectionClosed()
-    except (asyncio.LimitOverrunError, ValueError):
+    except asyncio.LimitOverrunError:
         raise LineOverflow()
     if len(raw) > max_line:
         raise LineOverflow()
@@ -74,8 +75,12 @@ async def session(
     idle_timeout: float,
     max_line: int,
 ) -> None:
-    await write_line(writer, BANNER)
-    await _write_prompt(writer)
+    try:
+        await write_line(writer, BANNER)
+        await _write_prompt(writer)
+    except (ConnectionError, BrokenPipeError):
+        return
+
     while True:
         try:
             line = await read_line(reader, max_line, idle_timeout)
@@ -91,20 +96,23 @@ async def session(
         tokens = line.upper().split()
         result = commands.dispatch(tokens)
 
-        if result is commands.QUIT:
-            await write_line(writer, "73 DE VGR1")
-            return
+        try:
+            if result is commands.QUIT:
+                await write_line(writer, "73 DE VGR1")
+                return
 
-        if not result:
+            if not result:
+                await _write_prompt(writer)
+                continue
+
+            if len(result) == 1:
+                await write_line(writer, result[0])
+            else:
+                await write_block(writer, result)
+
             await _write_prompt(writer)
-            continue
-
-        if len(result) == 1:
-            await write_line(writer, result[0])
-        else:
-            await write_block(writer, result)
-
-        await _write_prompt(writer)
+        except (ConnectionError, BrokenPipeError):
+            return
 
 
 async def _safe_write_line(writer: asyncio.StreamWriter, line: str) -> None:
