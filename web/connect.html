@@ -77,75 +77,54 @@
     <div class="nav"><a href="./">← back to terminal</a></div>
     <h1>CONNECT FROM YOUR OWN MACHINE</h1>
     <p class="lede">The in-browser terminal is a convenience. For the real
-    experience, talk to the server over raw TCP yourself. It's on
+    experience, open a socket from your own terminal and type commands
+    at the <code>&gt;</code> prompt. It's on
     <code>voyager1.v9n.us:4242</code>.</p>
 
-    <h2>Linux / macOS: netcat</h2>
+    <p><strong>Don't want to fight your OS?</strong> Open the bootcamp's
+    <a href="https://github.com/trickv/coding-bootcamp-codespace" target="_blank" rel="noopener">GitHub Codespace</a>
+    — it's a Linux environment with <code>nc</code> and <code>telnet</code>
+    already installed, running in your browser. Then follow the Linux
+    section below.</p>
 
-    <p>Most Linux distros ship OpenBSD <code>nc</code>:</p>
-<pre>echo 'STATUS' | nc -q 1 voyager1.v9n.us 4242</pre>
+    <h2>macOS</h2>
 
-    <p>macOS ships BSD <code>nc</code>, which has no <code>-q</code>:</p>
-<pre>echo 'STATUS' | nc -w 2 voyager1.v9n.us 4242</pre>
+    <p>Open Terminal and:</p>
+<pre>telnet voyager1.v9n.us 4242
+<em># or</em>
+nc voyager1.v9n.us 4242</pre>
 
-    <p>Not sure which flavor? Detect automatically:</p>
-<pre>if nc -h 2>&amp;1 | grep -q -- '-q'; then NC_ARGS="-q 1"; else NC_ARGS="-w 2"; fi
-echo 'STATUS' | nc $NC_ARGS voyager1.v9n.us 4242</pre>
+    <p>Type <code>STATUS</code> then Enter. Try other commands. Type
+    <code>QUIT</code> to exit cleanly (or Ctrl-] then <code>quit</code>
+    to force-close telnet).</p>
 
-    <h2>Windows: PowerShell</h2>
+    <h2>Windows</h2>
 
-    <p>Stock Win10 / Win11, no install required. <code>nc</code> isn't
-    available in cmd or PowerShell, but you can use the .NET
-    <code>TcpClient</code> class:</p>
+    <p>Honestly: use the
+    <a href="./">in-browser terminal</a> or the bootcamp
+    <a href="https://github.com/trickv/coding-bootcamp-codespace" target="_blank" rel="noopener">Codespace</a>.
+    Windows doesn't ship a usable <code>nc</code> or <code>telnet</code>,
+    and the workarounds (PowerShell TCP clients, third-party netcat
+    ports) are more trouble than they're worth for a short poking
+    session.</p>
 
-<pre>$client = New-Object System.Net.Sockets.TcpClient("voyager1.v9n.us", 4242)
-$client.ReceiveTimeout = 3000
-$stream = $client.GetStream()
-$cmd = [System.Text.Encoding]::ASCII.GetBytes("STATUS`r`n")
-$stream.Write($cmd, 0, $cmd.Length)
-$buf = New-Object System.IO.MemoryStream
-$chunk = New-Object byte[] 4096
-try {
-  while ($true) {
-    $n = $stream.Read($chunk, 0, $chunk.Length)
-    if ($n -le 0) { break }
-    $buf.Write($chunk, 0, $n)
-    $text = [System.Text.Encoding]::ASCII.GetString($buf.ToArray())
-    if ($text -match "`n\.`r?`n") { break }
-  }
-} catch [System.IO.IOException] { }
-$client.Close()
-[System.Text.Encoding]::ASCII.GetString($buf.ToArray())</pre>
+    <p>If you already have
+    <a href="https://learn.microsoft.com/en-us/windows/wsl/install" target="_blank" rel="noopener">WSL</a>
+    installed, jump into a Linux shell and follow the Linux instructions
+    below:</p>
+<pre>wsl</pre>
 
-    <p>If you have WSL installed, prefer that — it gives you a real
-    <code>nc</code>:</p>
-<pre>wsl -- bash -c "echo STATUS | nc -q 1 voyager1.v9n.us 4242"</pre>
+    <h2>Linux (or WSL, or the Codespace)</h2>
 
-    <h2>Python (anywhere Python runs)</h2>
-<pre>python3 -c '
-import socket
-s = socket.create_connection(("voyager1.v9n.us", 4242), timeout=5)
-s.sendall(b"STATUS\r\n")
-s.settimeout(3)
-buf = b""
-try:
-    while True:
-        c = s.recv(4096)
-        if not c: break
-        buf += c
-        if b"\n.\r\n" in buf or b"\n.\n" in buf: break
-except socket.timeout: pass
-s.close()
-print(buf.decode("ascii", errors="replace"))
-'</pre>
+<pre>telnet voyager1.v9n.us 4242
+<em># or</em>
+nc voyager1.v9n.us 4242</pre>
 
-    <h2>Interactive: telnet</h2>
-
-    <p>If you just want to poke around by hand:</p>
-<pre>telnet voyager1.v9n.us 4242</pre>
-
-    <p>Ctrl-] then type <code>quit</code> to exit (or type <code>QUIT</code>
-    at the prompt — the server closes the connection cleanly).</p>
+    <p>Missing both? On Debian / Ubuntu / WSL:</p>
+<pre>sudo apt install -y telnet netcat-openbsd</pre>
+    <p>On Fedora / RHEL: <code>sudo dnf install telnet nmap-ncat</code>
+    (use <code>ncat</code> in place of <code>nc</code>). On Arch:
+    <code>sudo pacman -S inetutils openbsd-netcat</code>.</p>
 
     <h2>The protocol</h2>
     <ul>
