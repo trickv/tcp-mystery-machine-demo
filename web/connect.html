@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Connect from your own machine · V9N Voyager 1 Emulator</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a0e14;
+      --fg: #c5d1e0;
+      --accent: #ff9f43;
+      --dim: #6c7a89;
+      --box: #151b24;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 15px;
+      line-height: 1.55;
+    }
+    main {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 28px 22px 60px;
+    }
+    h1 {
+      font-size: 22px;
+      color: var(--accent);
+      letter-spacing: 0.03em;
+      margin: 0 0 6px;
+    }
+    h2 {
+      font-size: 16px;
+      margin: 28px 0 10px;
+      color: var(--fg);
+      border-bottom: 1px solid #1f2733;
+      padding-bottom: 4px;
+    }
+    p, li { color: var(--fg); }
+    a { color: var(--accent); }
+    a:hover { text-decoration: underline; }
+    .lede { color: var(--dim); margin-top: 0; }
+    pre, code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+    }
+    pre {
+      background: var(--box);
+      color: #e6eaf0;
+      padding: 10px 12px;
+      border-radius: 4px;
+      overflow-x: auto;
+      margin: 8px 0 14px;
+    }
+    code {
+      background: var(--box);
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+    .nav {
+      margin: 22px 0 6px;
+      font-size: 13px;
+      color: var(--dim);
+    }
+    .nav a { color: var(--dim); }
+    .nav a:hover { color: var(--accent); }
+    ul { padding-left: 22px; }
+    li { margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="nav"><a href="./">← back to terminal</a></div>
+    <h1>CONNECT FROM YOUR OWN MACHINE</h1>
+    <p class="lede">The in-browser terminal is a convenience. For the real
+    experience, talk to the server over raw TCP yourself. It's on
+    <code>voyager1.v9n.us:4242</code>.</p>
+
+    <h2>Linux / macOS: netcat</h2>
+
+    <p>Most Linux distros ship OpenBSD <code>nc</code>:</p>
+<pre>echo 'STATUS' | nc -q 1 voyager1.v9n.us 4242</pre>
+
+    <p>macOS ships BSD <code>nc</code>, which has no <code>-q</code>:</p>
+<pre>echo 'STATUS' | nc -w 2 voyager1.v9n.us 4242</pre>
+
+    <p>Not sure which flavor? Detect automatically:</p>
+<pre>if nc -h 2>&amp;1 | grep -q -- '-q'; then NC_ARGS="-q 1"; else NC_ARGS="-w 2"; fi
+echo 'STATUS' | nc $NC_ARGS voyager1.v9n.us 4242</pre>
+
+    <h2>Windows: PowerShell</h2>
+
+    <p>Stock Win10 / Win11, no install required. <code>nc</code> isn't
+    available in cmd or PowerShell, but you can use the .NET
+    <code>TcpClient</code> class:</p>
+
+<pre>$client = New-Object System.Net.Sockets.TcpClient("voyager1.v9n.us", 4242)
+$client.ReceiveTimeout = 3000
+$stream = $client.GetStream()
+$cmd = [System.Text.Encoding]::ASCII.GetBytes("STATUS`r`n")
+$stream.Write($cmd, 0, $cmd.Length)
+$buf = New-Object System.IO.MemoryStream
+$chunk = New-Object byte[] 4096
+try {
+  while ($true) {
+    $n = $stream.Read($chunk, 0, $chunk.Length)
+    if ($n -le 0) { break }
+    $buf.Write($chunk, 0, $n)
+    $text = [System.Text.Encoding]::ASCII.GetString($buf.ToArray())
+    if ($text -match "`n\.`r?`n") { break }
+  }
+} catch [System.IO.IOException] { }
+$client.Close()
+[System.Text.Encoding]::ASCII.GetString($buf.ToArray())</pre>
+
+    <p>If you have WSL installed, prefer that — it gives you a real
+    <code>nc</code>:</p>
+<pre>wsl -- bash -c "echo STATUS | nc -q 1 voyager1.v9n.us 4242"</pre>
+
+    <h2>Python (anywhere Python runs)</h2>
+<pre>python3 -c '
+import socket
+s = socket.create_connection(("voyager1.v9n.us", 4242), timeout=5)
+s.sendall(b"STATUS\r\n")
+s.settimeout(3)
+buf = b""
+try:
+    while True:
+        c = s.recv(4096)
+        if not c: break
+        buf += c
+        if b"\n.\r\n" in buf or b"\n.\n" in buf: break
+except socket.timeout: pass
+s.close()
+print(buf.decode("ascii", errors="replace"))
+'</pre>
+
+    <h2>Interactive: telnet</h2>
+
+    <p>If you just want to poke around by hand:</p>
+<pre>telnet voyager1.v9n.us 4242</pre>
+
+    <p>Ctrl-] then type <code>quit</code> to exit (or type <code>QUIT</code>
+    at the prompt — the server closes the connection cleanly).</p>
+
+    <h2>The protocol</h2>
+    <ul>
+      <li>No <code>HELP</code>, no <code>?</code>, no menu.</li>
+      <li>Try <code>STATUS</code> first. Then <code>DSN LINK</code>,
+      <code>INST LIST</code>, <code>FDS MEM</code>, <code>LOG 20</code>.</li>
+      <li>Unknown command → <code>?CMD</code>. Bad args →
+      <code>?SYNTAX</code>. Don't panic.</li>
+      <li>Multi-line replies end with a line containing just
+      <code>.</code> (SMTP-style).</li>
+      <li>Full command grammar:
+      <a href="https://github.com/trickv/tcp-mystery-machine-demo/blob/master/skills/voyager-probe/reference/commands.md" target="_blank" rel="noopener">commands.md</a>.</li>
+    </ul>
+
+    <h2>Let Claude Code drive</h2>
+
+    <p>Install the Claude Code Skill — it knows the protocol and the
+    transport quirks, and echoes the exact shell command it used so
+    you still learn while it drives. Instructions in the
+    <a href="https://github.com/trickv/tcp-mystery-machine-demo#or-install-the-claude-code-skill-and-let-it-do-the-work" target="_blank" rel="noopener">project README</a>.</p>
+  </main>
+</body>
+</html>
