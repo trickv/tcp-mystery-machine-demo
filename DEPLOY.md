@@ -2,7 +2,9 @@
 
 Target: the bootcamp VPS is Debian 9 (stretch) with docker 19.03 and
 docker-compose 1.8. The compose file uses the v2 schema so compose 1.8
-understands it. Port 4242/tcp needs to reach the public internet.
+understands it. Two ports need to reach the public internet:
+- **4242/tcp** — raw TCP protocol server.
+- **8080/tcp** — HTTP + WebSocket bridge serving the in-browser terminal.
 
 ## Prereqs (Debian 9 / stretch)
 
@@ -19,26 +21,40 @@ cd tcp-mystery-machine-demo
 docker-compose up -d --build
 ```
 
-Open port 4242 in whatever firewall the host uses (iptables / ufw /
-cloud SG). Stretch's `ufw` predates the iptables-nft transition, so if
-`ufw` behaves strangely, `iptables -A INPUT -p tcp --dport 4242 -j
-ACCEPT` is the direct path.
+Open ports 4242 and 8080 in whatever firewall the host uses
+(iptables / ufw / cloud SG). Stretch's `ufw` predates the iptables-nft
+transition, so if `ufw` behaves strangely, the direct path is:
+```sh
+iptables -A INPUT -p tcp --dport 4242 -j ACCEPT
+iptables -A INPUT -p tcp --dport 8080 -j ACCEPT
+```
 
 ## Verify from the VPS
 
+Raw TCP:
 ```sh
 echo 'STATUS' | nc -q 1 localhost 4242
+```
+Browser bridge:
+```sh
+curl -sSf http://localhost:8080/ | head -1     # -> <!DOCTYPE html>
+```
+Logs:
+```sh
 docker-compose logs -f --tail=50
 ```
 
-Expected: banner + STATUS block terminated by `.`, container logs show
-`listening on ('0.0.0.0', 4242)` and a connect/close pair for the smoke.
+Expected: `voyager` container shows `listening on ('0.0.0.0', 4242)`,
+`voyager-bridge` container shows `listening on 0.0.0.0:8080` and
+`upstream voyager:4242`.
 
 ## Verify from the outside
 
 ```sh
 echo 'STATUS' | nc -q 1 voyager1.v9n.us 4242
+curl -sSf http://voyager1.v9n.us:8080/ | head -1
 ```
+Then open `http://voyager1.v9n.us:8080/` in a browser and type `STATUS`.
 
 If you get connection refused: check the host firewall, check
 `ss -ltnp | grep 4242` on the VPS, check the container is running
