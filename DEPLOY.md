@@ -16,8 +16,8 @@ bootstrap them.
 ## First-time setup
 
 ```sh
-git clone git@github.com:trickv/tcp-mystery-machine-demo.git
-cd tcp-mystery-machine-demo
+git clone git@github.com:trickv/v9n-voyager1-lab.git
+cd v9n-voyager1-lab
 docker-compose up -d --build
 ```
 

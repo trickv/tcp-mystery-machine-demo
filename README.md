@@ -1,10 +1,18 @@
-# V9N Voyager 1 Emulator
+# v9n-voyager1-lab
 
-There is a Voyager 1 spacecraft emulator running at **`voyager1.v9n.us:4242`**.
-It speaks a deliberately undocumented line-based protocol over raw TCP.
-There's no `HELP`, no menu, no banner longer than four words.
+A pretend Voyager 1 spacecraft computer, running on the internet at
+**`voyager1.v9n.us:4242`**. It speaks a deliberately undocumented
+line-based protocol over raw TCP. There's no `HELP`, no menu, no
+banner longer than four words. Every wrong guess you type returns
+`?CMD` or `?SYNTAX`. That is by design.
 
-Every wrong guess you type returns `?CMD` or `?SYNTAX`. That is by design.
+This is a **learning tool** for the V9N AI Coding Bootcamp, built
+around the Claude Code Skills concept. It is not a simulator, not
+a reconstruction of JPL's actual flight software, and not connected
+to anything real. Think of it as what you might imagine Voyager 1's
+computer does from the outside — plausible, evocative, and entirely
+fictional in its details. Any number you see that looks like
+telemetry is labeled `(APPROX)` for a reason.
 
 ## Try it in your browser
 
@@ -50,7 +58,7 @@ and drives it for you.
 
 1. Ask your Claude Code agent:
 
-   > Install this Skill into the project directory: https://github.com/trickv/tcp-mystery-machine-demo/tree/master/skills/voyager-probe
+   > Install this Skill into the project directory: https://github.com/trickv/v9n-voyager1-lab/tree/master/skills/voyager-probe
 
    Accept the permission prompts.
 

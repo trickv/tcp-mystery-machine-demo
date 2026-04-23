@@ -3,7 +3,7 @@ version: '2'
 services:
   voyager:
     build: .
-    image: tcp-mystery-machine:latest
+    image: v9n-voyager1-lab:latest
     container_name: voyager
     restart: unless-stopped
     ports:
@@ -20,7 +20,7 @@ services:
         max-file: "3"
 
   bridge:
-    image: tcp-mystery-machine:latest
+    image: v9n-voyager1-lab:latest
     container_name: voyager-bridge
     restart: unless-stopped
     depends_on:
