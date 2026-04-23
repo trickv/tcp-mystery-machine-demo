@@ -70,7 +70,9 @@ and drives it for you.
 
 1. Ask your Claude Code agent:
 
-   > Install this Skill into the project directory: https://github.com/trickv/v9n-voyager1-lab/tree/master/skills/voyager-probe
+   ```
+   Install this Skill into the project directory: https://github.com/trickv/v9n-voyager1-lab/tree/master/skills/voyager-probe
+   ```
 
    Accept the permission prompts.
 
