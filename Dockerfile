@@ -3,7 +3,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Bridge dep only; server is stdlib-only.
-RUN pip install --no-cache-dir websockets==16.0
+RUN pip install --no-cache-dir --progress-bar off websockets==16.0
 
 COPY server/ ./server/
 COPY bridge/ ./bridge/
