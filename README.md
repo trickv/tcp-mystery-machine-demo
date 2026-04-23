@@ -33,9 +33,11 @@ nc voyager1.v9n.us 4242
 Type `STATUS` then Enter. Try other things. Type `QUIT` when you're
 done (or Ctrl-] then `quit` to force-close telnet).
 
-Windows or macOS and these don't Just Work? See
+Stuck on Windows or missing a tool? See
+<https://voyager1.v9n.us/connect.html> for per-OS instructions
+(or the skill's imperative version at
 [`skills/voyager-probe/reference/transports.md`](./skills/voyager-probe/reference/transports.md)
-for per-OS instructions.
+if you want to see how the skill itself connects — no magic).
 
 You'll get a brief status block. To find out what else to type — the
 whole point is that you can't. The server won't tell you.

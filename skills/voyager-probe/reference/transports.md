@@ -1,107 +1,66 @@
-# Transports
+# Transports (skill reference)
 
-How to talk to `voyager1.v9n.us:4242` from your own machine. Pick
-the section that matches your OS. Open a socket, type commands at
-the `> ` prompt, type `QUIT` when done.
+Audience: Claude Code executing the voyager-probe skill. Imperative,
+minimal, no OS hand-holding.
 
-**Don't want to fight your OS?** Open the bootcamp's GitHub
-Codespace at
-<https://github.com/trickv/coding-bootcamp-codespace> — it's a
-Linux environment with `nc` and `telnet` already installed, in your
-browser, free.
+Target: `voyager1.v9n.us:4242` (override via `$VOYAGER_HOST`). Raw
+TCP, CRLF line-oriented. Server sends a banner + `> ` prompt; reply
+framing is one-line (no terminator) or multi-line (terminated by a
+line containing just `.`). Errors: `?CMD`, `?SYNTAX`, `?BUSY`,
+`?OVF`, `?TIMEOUT`, `?SHUTDOWN`.
 
----
+## Selection order
 
-## macOS
+Try in this order; stop at the first one that works.
 
-```sh
-telnet voyager1.v9n.us 4242
-# or
-nc voyager1.v9n.us 4242
-```
+1. `nc` — most common on Unix-like hosts.
+2. `ncat` (nmap) — fallback if `nc` is absent.
+3. `python3` — fallback for Windows / locked-down shells.
+4. `node` — fallback if Python is absent but Node is present.
 
-Both ship with macOS. Works the same way interactively.
+Do **not** use interactive `telnet` from the skill; it's meant for
+humans. Do **not** hold sockets open across Bash calls (each tool
+invocation is its own subprocess). Do **not** assume the flavor of
+`nc` — detect.
 
----
-
-## Windows
-
-Honestly, **just use the web terminal at
-<https://voyager1.v9n.us/>**. It's identical in every way that
-matters and it works in any browser. Windows doesn't ship `nc` or a
-usable `telnet` and the alternatives involve enough PowerShell that
-they're not worth it for a poking session.
-
-If you really want a local client: install
-[WSL](https://learn.microsoft.com/en-us/windows/wsl/install) and
-use the Linux tools inside it:
+## Detect nc flavor first
 
 ```sh
-wsl
-telnet voyager1.v9n.us 4242
+if nc -h 2>&1 | grep -q -- '-q'; then NC_ARGS="-q 1"
+else NC_ARGS="-w 2"; fi
 ```
 
-Or spin up the bootcamp [Codespace](https://github.com/trickv/coding-bootcamp-codespace)
-and do it from the browser.
+- OpenBSD nc (most Linux): `-q 1` exits 1s after stdin closes.
+- BSD nc (macOS): no `-q`, use `-w 2`.
+- GNU netcat (rare): use `-c`.
 
----
-
-## Linux
+## One-shot query (preferred)
 
 ```sh
-telnet voyager1.v9n.us 4242
-# or
-nc voyager1.v9n.us 4242
+echo 'STATUS' | nc $NC_ARGS "${VOYAGER_HOST:-voyager1.v9n.us}" 4242
 ```
 
-If neither is installed, grab them on Debian / Ubuntu / WSL:
+Swap `STATUS` for any command. For multi-command probes, send each
+as a separate invocation — not a persistent socket.
+
+## ncat fallback
 
 ```sh
-sudo apt install -y telnet netcat-openbsd
+echo 'STATUS' | ncat --recv-only "${VOYAGER_HOST:-voyager1.v9n.us}" 4242
 ```
 
-On Fedora / RHEL: `sudo dnf install telnet nmap-ncat` (then use
-`ncat` in place of `nc`). On Arch: `sudo pacman -S inetutils
-openbsd-netcat`.
+## Python fallback
 
----
-
-## How to read the replies
-
-- **Banner on connect:** `VGR1 FDS READY` then a `> ` prompt.
-- **Single-line reply:** one line, then `> ` again. All errors look
-  like `?CMD`, `?SYNTAX`, `?BUSY`, `?OVF`, `?TIMEOUT`, `?SHUTDOWN`.
-- **Multi-line reply:** several lines terminated by a line containing
-  only `.` (SMTP-style). Stop reading when you see that line.
-- **On `?BUSY` / `?OVF` / `?TIMEOUT` / `?SHUTDOWN`** the server closes
-  the connection after sending the error.
-
-## Common failure modes
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| Connection refused | server down, wrong port, firewall | check host / port 4242 |
-| Connection hangs with no banner | network firewall blocking TCP out | try from a different network |
-| `?BUSY` received | server at 200-connection cap | retry later |
-| `?TIMEOUT` and disconnect | you idled for 120s | reconnect |
-
----
-
-## Last resort: programmatic fallbacks
-
-If `telnet`, `nc`, and PowerShell all fail you and you still have
-Python or Node on the box, these send one command and print the
-response:
-
-### Python
+Works anywhere Python is installed; no flavor detection.
 
 ```sh
 python3 -c '
-import socket, sys
-s = socket.create_connection(("voyager1.v9n.us", 4242), timeout=5)
+import socket, sys, os
+host = os.environ.get("VOYAGER_HOST", "voyager1.v9n.us")
+s = socket.create_connection((host, 4242), timeout=5)
 s.sendall(b"STATUS\r\n")
-s.settimeout(3)
 buf = b""
+s.settimeout(3)
 try:
     while True:
         chunk = s.recv(4096)
@@ -114,12 +73,13 @@ sys.stdout.write(buf.decode("ascii", errors="replace"))
 '
 ```
 
-### Node
+## Node fallback
 
 ```sh
 node -e '
 const net = require("net");
-const s = net.connect(4242, "voyager1.v9n.us");
+const host = process.env.VOYAGER_HOST || "voyager1.v9n.us";
+const s = net.connect(4242, host);
 let buf = "";
 s.on("connect", () => s.write("STATUS\r\n"));
 s.on("data", d => {
@@ -129,3 +89,47 @@ s.on("data", d => {
 s.setTimeout(5000, () => { process.stdout.write(buf); s.destroy(); });
 '
 ```
+
+## PowerShell fallback (Windows only)
+
+Use when the user is on Windows and has no WSL / Python / Node.
+
+```powershell
+$c = New-Object System.Net.Sockets.TcpClient("voyager1.v9n.us", 4242)
+$c.ReceiveTimeout = 3000
+$s = $c.GetStream()
+$cmd = [System.Text.Encoding]::ASCII.GetBytes("STATUS`r`n")
+$s.Write($cmd, 0, $cmd.Length)
+$buf = New-Object System.IO.MemoryStream
+$ch = New-Object byte[] 4096
+try {
+  while ($true) {
+    $n = $s.Read($ch, 0, $ch.Length)
+    if ($n -le 0) { break }
+    $buf.Write($ch, 0, $n)
+    $t = [System.Text.Encoding]::ASCII.GetString($buf.ToArray())
+    if ($t -match "`n\.`r?`n") { break }
+  }
+} catch [System.IO.IOException] { }
+$c.Close()
+[System.Text.Encoding]::ASCII.GetString($buf.ToArray())
+```
+
+## Parsing rules
+
+- Read until a line containing only `.` for multi-line replies.
+- Read until timeout (short — 1-3s) for single-line replies /
+  errors; there's no terminator on those.
+- Stop on `?BUSY` / `?OVF` / `?TIMEOUT` / `?SHUTDOWN`; the server
+  closes after sending.
+- Strip CR/LF when comparing tokens. All server output is uppercase.
+
+## Failure handling
+
+| Symptom | Action |
+|---|---|
+| `nc: invalid option -- 'q'` | Re-detect flavor; use `-w 2` |
+| Connection refused | Report to user; don't retry silently |
+| `?BUSY` | Tell user the server is full; wait before retry |
+| Empty output | Peer closed early; retry once, then report |
+| Hang with no data | `nc` flavor mismatch or network; switch transport |
