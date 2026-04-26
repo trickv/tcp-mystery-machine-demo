@@ -266,6 +266,65 @@ def _cmd_quit(args: list[str]):
     return QUIT
 
 
+# --- ham radio easter eggs ------------------------------------------------
+
+
+def _cmd_cq(args: list[str]):
+    if args:
+        return [ERR_SYNTAX]
+    now = telemetry.now_utc()
+    au = telemetry.distance_au(now)
+    owlt = telemetry.format_hms(telemetry.one_way_light_time(now))
+    return [
+        "CQ CQ CQ DE VGR1",
+        f"QTH      INTERSTELLAR SPACE  {au:.2f} AU FROM SOL",
+        "QRG      8.415 GHZ X-BAND DOWN",
+        "PWR      22.4 W AT FEED",
+        f"QSB      {owlt} OWLT -- QRX PATIENTLY",
+        "K",
+    ]
+
+
+def _cmd_qth(args: list[str]):
+    if args:
+        return [ERR_SYNTAX]
+    now = telemetry.now_utc()
+    au = telemetry.distance_au(now)
+    km = telemetry.distance_km(now)
+    return [
+        "QTH VGR1",
+        f"DIST     {au:.2f} AU   {km:.3E} KM",
+        "RA       17H 13M",
+        "DEC      +12 02",
+        "CONST    OPHIUCHUS",
+        "GRID     BEYOND MAIDENHEAD ALLOCATION",
+        "NOTE     APPROX; EPHEMERIS MODEL",
+    ]
+
+
+def _cmd_qsl(args: list[str]):
+    if args:
+        return [ERR_SYNTAX]
+    now = telemetry.now_utc()
+    au = telemetry.distance_au(now)
+    owlt = telemetry.format_hms(telemetry.one_way_light_time(now))
+    rtlt = telemetry.format_hms(telemetry.round_trip_light_time(now))
+    date_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%H:%MZ")
+    return [
+        "QSL DE VGR1",
+        f"DATE     {date_str} {time_str}",
+        f"QRG      8415.000 MHZ",
+        "MODE     PM/PCM PHASE MODULATION",
+        "RST      319 -- WEAK BUT READABLE AFTER 23 HOURS",
+        f"QTH      INTERSTELLAR SPACE {au:.2f} AU",
+        f"RTLT     {rtlt}",
+        "RIG      20W TWTA + 3.7M HGA",
+        "ANT      DSN 70M CASSEGRAIN",
+        "73 TU DE VGR1 -- PSE QSL VIA BUREAU (JPL PASADENA CA)",
+    ]
+
+
 _TOP_LEVEL = {
     "STATUS": _cmd_status,
     "RTG": _cmd_rtg,
@@ -278,4 +337,7 @@ _TOP_LEVEL = {
     "QUIT": _cmd_quit,
     "BYE": _cmd_quit,
     "LOGOUT": _cmd_quit,
+    "CQ": _cmd_cq,
+    "QTH": _cmd_qth,
+    "QSL": _cmd_qsl,
 }
